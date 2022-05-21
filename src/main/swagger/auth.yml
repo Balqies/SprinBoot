@@ -1,0 +1,568 @@
+swagger: '2.0'
+info:
+  title: Monty Authentication API
+  description: Authentication service for the Monty API
+  version: '1.0.0'
+  license:
+    name: Private License
+    url: https://api.sendasyou.io/
+  contact:
+    url: https://api.sendasyou.io/
+    email: contact@sendasyou.com
+
+# the domain of the service
+host: staging-api.ubsend.io
+
+# array of all schemes that your API supports
+schemes:
+  - https
+
+# will be prefixed to all paths
+basePath: /v1
+produces:
+  - application/json
+
+securityDefinitions:
+  jwtAuth:
+    type: apiKey
+    in: header
+    name: Authorization
+    description: |
+      JWT Access Token (e.g. Authorization: Bearer access-token)
+  clientId:
+    in: header
+    name: ClientId
+    description: |
+      In case of a user that belongs to multiple clients,
+      this header can identify which client is active
+      within the API call.
+
+
+definitions:
+  UserCredentials:
+    type: object
+    description: User credentials to authenticate against the service
+    required:
+      - username
+      - password
+    properties:
+      username:
+        type: string
+        description: The username
+        minLength: 1
+        maxLength: 50
+      password:
+        type: string
+        description: The password
+        minLength: 6
+        maxLength: 50
+
+  CommonUserProperties:
+    type: object
+    description: Common user properties
+    required:
+      - email
+      - firstName
+      - lastName
+    properties:
+      email:
+        type: string
+        description: The e-mail of the user
+        minLength: 1
+        maxLength: 250
+      firstName:
+        type: string
+        description: The first name of the user
+        minLength: 1
+        maxLength: 100
+      lastName:
+        type: string
+        description: The last name of the user
+        minLength: 1
+        maxLength: 100
+      newsletterOptIn:
+        type: boolean
+        description: Indicates if the user is subscribed to the newsletter
+      createdAt:
+        type: string
+        format: date-time
+        description: The date and time when the user was created
+
+  # Please do not remove. Although not used in this service, we receive Kafka messages from the monty-signup-service,
+  # which use this type of payload.
+  UserStatus:
+    type: string
+    description: |
+      User status can be one of UNCONFIRMED, CONFIRMED, ARCHIVED, COMPROMISED, UNKNOWN, RESET_REQUIRED,
+      FORCE_CHANGE_PASSWORD
+    enum:
+      - UNCONFIRMED
+      - CONFIRMED
+      - ARCHIVED
+      - COMPROMISED
+      - UNKNOWN
+      - RESET_REQUIRED
+      - FORCE_CHANGE_PASSWORD
+
+  RoleScope:
+    type: string
+    description: Determines the scope where the role is applied to.
+    enum:
+      - LOCAL
+      - CHILDREN
+
+  BasicRole:
+    type: object
+    description: |
+      Represents a role associated with a user
+      Only contains the basic information of the role
+    properties:
+      id:
+        type: integer
+        format: int64
+        description: The ID of the role.
+      name:
+        type: string
+        description: The name of the role.
+    required:
+      - name
+
+  Role:
+    type: object
+    description: |
+      Represents a role associated with a claim (e.g. Store Manager).
+      A role belongs to a client.
+    allOf:
+      - $ref: '#/definitions/BasicRole'
+      - type: object
+        properties:
+          description:
+            type: string
+            description: The long description of the role
+          permissions:
+            type: array
+            description: The permissions that comprise the role.
+            items:
+              type: string
+          scope:
+            $ref: '#/definitions/RoleScope'
+            description: |
+              Determines the scope of the role. Valid values are LOCAL (the default) and CHILDREN.
+              When set to CHILDREN, the role's scope extends to the child clients of the client that the role
+              belongs to.
+
+  ClientLevel:
+    type: string
+    description: Deprecated. Indicates the level of the client within the client hierarchy.
+    enum:
+      - NORMAL
+      - TENANT
+      - PLATFORM_OWNER
+
+  ClientType:
+    type: string
+    description: Indicates the type of the client within the client hierarchy.
+    enum:
+      - ACCOUNT
+      - COMPANY
+      - TENANT
+      - PLATFORM_OWNER
+
+  Client:
+    type: object
+    description: |
+      Represents a client associated with a claim. Please note that this object does
+      not hold the full details of a client. If you are interested in the full details,
+      see the /clients endpoint and the ClientDetails model.
+    properties:
+      id:
+        type: integer
+        format: int64
+        description: The ID of the client.
+      name:
+        type: string
+        description: The name of the client.
+        minLength: 1
+        maxLength: 100
+      level:
+        $ref: '#/definitions/ClientLevel'
+        description: Indicates the level of the client within the client hierarchy.
+      clientType:
+        $ref: '#/definitions/ClientType'
+        description: Indicates the type of the client within the client hierarchy.
+    required:
+      - name
+
+  Claim:
+    type: object
+    description: Represents the membership of a user in a client.
+    properties:
+      client:
+        $ref: '#/definitions/Client'
+      roles:
+        type: array
+        description: The roles that the user is assigned to within this client.
+        items:
+          $ref: '#/definitions/Role'
+
+  ConfirmedUser:
+    type: object
+    description: Represents a user who is allowed to login. This object does not have a status property.
+    allOf:
+      - $ref: '#/definitions/CommonUserProperties'
+      - type: object
+        properties:
+          username:
+            type: string
+            description: The username of the user
+          claims:
+            type: array
+            description: The clients that the user is a member of
+            items:
+              $ref: '#/definitions/Claim'
+
+  RefreshTokenResult:
+    type: object
+    description: The result of the refresh token operation includes the new access token
+    properties:
+      accessToken:
+        type: string
+        description: The access token to use for subsequent requests
+      expiresIn:
+        type: integer
+        description: The period in seconds that the access token is valid for from the moment it was issued
+      refreshToken:
+        type: string
+        description: The refresh token used to refresh the access token
+
+  LoginRequest:
+    type: object
+    description: The request for a login operation
+    allOf:
+      - $ref: '#/definitions/UserCredentials'
+      - type: object
+        properties:
+          omitClaims:
+            type: boolean
+            description: Set to true in order to omit the claims information
+
+  LoginResult:
+    type: object
+    description: The result of the login operation includes the access token and the user details
+    allOf:
+      - $ref: '#/definitions/ConfirmedUser'
+      - $ref: '#/definitions/RefreshTokenResult'
+
+  TokenVerificationResult:
+    type: object
+    description: The result of the token verification includes basic properties such as the username and the claims.
+    properties:
+      username:
+        type: string
+        description: The username of the user
+      claims:
+        type: array
+        description: The clients that the user is a member of
+        items:
+          $ref: '#/definitions/Claim'
+
+  SendForgotPasswordCodeResult:
+    type: object
+    description: |
+      The result of the sendForgotPasswordCode operation includes
+      the destination of the notification and the delivery medium
+    properties:
+      destination:
+        type: string
+        description: The destination for the code delivery details.
+      deliveryMedium:
+        type: string
+        description: |
+          The delivery medium (email message or phone number).
+          Possible values: SMS | EMAIL
+
+  ConfirmForgotPasswordRequest:
+    type: object
+    description: |
+      The request for changing the password
+    properties:
+      password:
+        type: string
+        description: The new user's password
+      confirmationCode:
+        type: string
+        description: The confirmation code sent by a user's request to retrieve a forgotten password.
+
+  BillingSchedule:
+    type: string
+    description: How frequently should billing be done. Values are WEEKLY and MONTHLY.
+    enum:
+      - WEEKLY
+      - MONTHLY
+
+  BillingInfo:
+    type: object
+    description: Holds billing information of a client.
+    properties:
+      schedule:
+        $ref: '#/definitions/BillingSchedule'
+        description: How frequently should billing be done. Values are WEEKLY and MONTHLY.
+      currency:
+        type: string
+        description: Currency code for billing (e.g. EUR, USD, etc).
+        maxLength: 5
+      vat:
+        type: string
+        description: The VAT number for billing.
+        maxLength: 20
+      eori:
+        type: string
+        description: |
+          Economic Operators Registration and Identification number.
+          The EORI number is a unique identification number that
+          companies are required to use when exchanging
+          data with Customs in all EU Member States.
+        maxLength: 20
+      additionalBillingEmail:
+        type: string
+        description: An optional additional e-mail address to receive billing updates.
+        maxLength: 200
+
+  Address:
+    type: object
+    description: Contains address information.
+    required:
+      - firstName
+      - lastName
+      - addressLine1
+      - postCode
+      - city
+      - country
+      - contactInfo
+    properties:
+      firstName:
+        type: string
+        description: The first name of a person
+        minLength: 1
+        maxLength: 100
+      lastName:
+        type: string
+        description: The last name of a person
+        minLength: 1
+        maxLength: 100
+      company:
+        type: string
+        description: The company name, in case this is a company
+        maxLength: 100
+      addressLine1:
+        type: string
+        description: The first address line
+        minLength: 1
+        maxLength: 100
+      addressLine2:
+        type: string
+        description: The second address line (optional)
+        maxLength: 100
+      postCode:
+        type: string
+        description: The post code
+        minLength: 1
+        maxLength: 10
+      city:
+        type: string
+        description: The city
+        minLength: 1
+        maxLength: 100
+      country:
+        type: string
+        description: The country code
+        minLength: 2
+        maxLength: 2
+      state:
+        type: string
+        description: The state code
+        minLength: 2
+        maxLength: 3
+      contactInfo:
+        $ref: '#/definitions/ContactInfo'
+        description: Contact information
+
+  ContactInfo:
+    type: object
+    description: Contant information
+    required:
+      - dialCode
+      - telephone
+      - email # mandatory here, unlike other services, because it is about invoicing
+    properties:
+      dialCode:
+        type: string
+        description: Area code or dial code
+        minLength: 1
+        maxLength: 5
+      telephone:
+        type: string
+        description: The telephone number
+        minLength: 1
+        maxLength: 15
+      email:
+        type: string
+        description: E-mail address for contacting
+        minLength: 1
+        maxLength: 200
+
+  ClientDetails:
+    type: object
+    description: Represents the full details of a client.
+    allOf:
+      - $ref: '#/definitions/Client'
+      - type: object
+        properties:
+          address:
+            $ref: '#/definitions/Address'
+            description: The address of the client.
+          billingInfo:
+            $ref: '#/definitions/BillingInfo'
+            description: Billing information of the client.
+          userCount:
+            type: integer
+            description: The number of users that can access this client directly through the linked roles.
+          externalId:
+            type: string
+            description: The unique identifier of the client in the system it originated from
+          externalOrigin:
+            type: string
+            description: The external origin identifies the owner of the client.
+
+  AuthorizationRequest:
+    type: object
+    description: A request to authorize a user against a client with a specific permission
+    required:
+      - token
+      - clientId
+    properties:
+      token:
+        type: string
+        description: The token that identifies the user
+        minLength: 1
+      clientId:
+        type: integer
+        format: int64
+        description: The client ID
+        minimum: 1
+      permission:
+        type: string
+        description: An optional permission to check. If not provided, any access is enough.
+        minLength: 1
+
+paths:
+  #
+  # Login, VerifyToken, RefreshToken.
+  # Essential operations for the authentication.
+  #
+
+  /login:
+    post:
+      operationId: login
+      description: |
+        Login to the service by username and password in order to obtain a token for further requests.
+
+        In addition to the token, the method returns authorization information about the user.
+
+        The token needs to be provided in all requests that require authentication in the form of
+        the standard Authentication Bearer header, e.g. "Authentication: Bearer TOKEN"
+      tags:
+        - Authentication
+      parameters:
+        - name: loginRequest
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/LoginRequest'
+      responses:
+        200:
+          description: The result of the login operation
+          schema:
+            $ref: '#/definitions/LoginResult'
+        400:
+          description: Invalid request
+          schema:
+            $ref: './error.yml#/ErrorInfo'
+        403:
+          description: User not found or user not confirmed
+          schema:
+            $ref: './error.yml#/ErrorInfo'
+
+  /token/authorize:
+    post:
+      operationId: authorizeToken
+      summary: Verifies an access token and returns information about the user who holds it.
+      tags:
+        - Verification
+      parameters:
+        - name: token
+          in: body
+          required: true
+          description: The token that is used for authentication
+          schema:
+            $ref: '#/definitions/AuthorizationRequest'
+      responses:
+        200:
+          description: The result of the verification
+          schema:
+            $ref: '#/definitions/TokenVerificationResult'
+        400:
+          description: Invalid request or malformed token
+          schema:
+            $ref: './error.yml#/ErrorInfo'
+
+  /token/decode:
+    post:
+      operationId: decodeToken
+      summary: Decodes the given access token and returns the username of the user that owns it.
+      tags:
+        - Verification
+      parameters:
+        - name: token
+          in: body
+          required: true
+          description: The token that is used for authentication
+          schema:
+            type: string
+      responses:
+        200:
+          description: The username
+          schema:
+            type: string
+        400:
+          description: Invalid request or malformed token
+          schema:
+            $ref: './error.yml#/ErrorInfo'
+        403:
+          description: If the token does not contain a valid username
+          schema:
+            $ref: './error.yml#/ErrorInfo'
+
+  /refresh-token:
+    post:
+      operationId: refreshToken
+      summary: |
+        Refreshes an access token and returns information about the user who holds it.
+      tags:
+        - Authentication
+      parameters:
+        - name: refreshToken
+          in: body
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: The result of the new login with the refresh token
+          schema:
+            $ref: '#/definitions/RefreshTokenResult'
+        400:
+          description: Invalid request or malformed token
+          schema:
+            $ref: './error.yml#/ErrorInfo'
+

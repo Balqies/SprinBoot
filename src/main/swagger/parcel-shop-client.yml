@@ -1,0 +1,264 @@
+swagger: '2.0'
+info:
+  title: Monty Parcelshops Service
+  description: Retrieve information about parcelshops with the Monty API
+  version: '1.0.0'
+  license:
+    name: Private License
+    url: https://api.sendasyou.io/
+  contact:
+    url: https://api.sendasyou.io/
+    email: contact@sendasyou.com
+
+externalDocs:
+  description: API docs (TODO)
+  url: https://shipping.sendasyou.io/docs/api/
+
+# the domain of the service
+host: staging-api.ubsend.io
+
+# array of all schemes that your API supports
+schemes:
+  - https
+
+# will be prefixed to all paths
+basePath: /v1
+produces:
+  - application/json
+
+securityDefinitions:
+  jwtAuth:
+    type: apiKey
+    description: 'JWT Access Token (e.g. Authorization: Bearer access-token)'
+    name: Authorization
+    in: header
+
+security:
+  - jwtAuth: []
+
+definitions:
+  ParcelShop:
+    type: object
+    description: A Parcel shop
+    properties:
+      id:
+        type: string
+        description: the id of the parcel shop used
+      name:
+        type: string
+        description: The name of the parcel shop
+      type:
+        type: string
+        description: |
+          The type of the parcel shop, the value is dependant on the carrier.
+          If the carrier has only one type of parcel shop this value will be null
+      latitude:
+        type: number
+        format: double
+        description: The latitude of the parcel shop
+      longitude:
+        type: number
+        format: double
+        description: The longitude of the parcel shop
+      carrier:
+        $ref: '#/definitions/Carrier'
+        description: The carrier that is serviced through this parcel shop
+      addressLine1:
+        type: string
+        description: the address of the parcel shop
+      postCode:
+        type: string
+        description: The post code of the parcel shop.
+      city:
+        type: string
+        description: The city the parcel shop is located in.
+      country:
+        type: string
+        description: The country the parcel shop is located in.
+      openingTimes:
+        type: array
+        description: A list containing the opening times of the parcel shop.
+        items:
+          $ref: '#/definitions/OpeningTime'
+      carrierData:
+        type: string
+        description: |
+          Custom data from the carrier, the data is in JSON format and differs per carrier.
+          Not all carriers have extra data that is returned.
+  GeoResult:
+    type: object
+    description: A Geo search result
+    properties:
+      parcelShop:
+        $ref: '#/definitions/ParcelShop'
+        description: A parcel shop
+      distance:
+        type: integer
+        format: int32
+        description: Distance in meters from a geo search point.
+
+  # 1. Need to document values explicitly due to a bug in the swagger HTML generator
+  # 2. Please keep the enum values sorted alphabetically to avoid suggesting a carrier
+  #    is preferred over another.
+  Carrier:
+    type: string
+    description: |
+      Represents the available carriers
+      (values: COLLECT_PLUS, CORREOS, CTT, DHL, DHL_SE, FASTWAY, GENIKI_GR, GLS, GLS_EU, GLS_DK, GLS_FR, HERMES_UK, INPOST_PL, MONDIAL_RELAY, OMNIVA, POSTE_ITALIANE, POSTI, POSTNORD_NO).
+    enum:
+      - COLLECT_PLUS
+      - CORREOS
+      - CTT
+      - DHL
+      - DHL_SE
+      - FASTWAY
+      - GENIKI_GR
+      - GLS
+      - GLS_EU
+      - GLS_DK
+      - GLS_FR
+      - HERMES_UK
+      - INPOST_PL
+      - MONDIAL_RELAY
+      - OMNIVA
+      - POSTE_ITALIANE
+      - POSTI
+      - POSTNORD_NO
+
+  OpeningTime:
+    type: object
+    properties:
+      day:
+        type: integer
+        description: The one-based weekday number the opening times are valid for. Week starting day is Monday.
+      from:
+        type: string
+        description: The opening time (e.g. "09:00")
+      to:
+        type: string
+        description: The closing time (e.g. "17:00")
+      closedDuring:
+        type: string
+        description: Closes during the given time (e.g. "12:00-14:00")
+
+  ParcelShopExportOutcome:
+    type: string
+    description: 'Enumeration of parcel shop export outcomes'
+    enum:
+      - FAILURE
+      - SUCCESS
+
+  ParcelShopExportStatus:
+    type: string
+    description: 'Enumeration of parcel shop export statuses'
+    enum:
+      - PENDING
+      - RUNNING
+      - FINISHED
+
+  ParcelShopExportParameters:
+    type: object
+    description: Parcel shop export parameters
+    properties:
+      carrier:
+        description: The ID of the carrier
+        $ref: '#/definitions/Carrier'
+      country:
+        type: string
+        description: The country the parcel shop is located in.
+      city:
+        type: string
+        description: The city the parcel shop is located in.
+      postCode:
+        type: string
+        description: The post code of the parcel shop.
+      limit:
+        type: integer
+        format: int32;
+        description: The maximum number of parcel shops to export.
+      email:
+        type: string
+        description: The e-mail address to send a message to when the file is retrievable.
+
+  ParcelShopExportTask:
+    type: object
+    description: Parcel shop export task
+    properties:
+      id:
+        type: string
+        description: the id of the parcel shop used
+      carrier:
+        description: The ID of the carrier
+        $ref: '#/definitions/Carrier'
+      country:
+        type: string
+        description: The country the parcel shop is located in.
+      city:
+        type: string
+        description: The city the parcel shop is located in.
+      postCode:
+        type: string
+        description: The post code of the parcel shop.
+      limit:
+        type: integer
+        format: int32;
+        description: The maximum number of parcel shops to export.
+      email:
+        type: string
+        description: The e-mail address to send a message to when the file is retrievable.
+      status:
+        $ref: '#/definitions/ParcelShopExportStatus'
+        description: The task status.
+      outcome:
+        $ref: '#/definitions/ParcelShopExportOutcome'
+        description: The task outcome, if status is finished.
+
+paths:
+  /parcel-shops:
+    get:
+      summary: Search for parcel shops
+      operationId: getParcelShops
+      tags:
+        - ParcelShop
+      parameters:
+        - name: carrier
+          in: query
+          type: string
+          required: true
+          description: |
+            The carrier to get the parcel shops for.
+        - name: country
+          in: query
+          type: string
+          required: true
+          description: |
+            The country code of the country you want to get the parcels shops in
+            Country codes are described in the ISO 3166-1 standard.
+        - name: city
+          in: query
+          required: false
+          type: string
+          description: |
+            Searches for parcel shops in the city.
+        - name: post_code
+          in: query
+          required: false
+          type: string
+          description: |
+            Searches for parcel shops near the given post code.
+        - name: limit
+          in: query
+          required: false
+          type: integer
+          description: The maximum number of results returned in the response
+      responses:
+        200:
+          description: An array of parcel shops.
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/ParcelShop'
+        401:
+          description: Authorization error
+          schema:
+            $ref: './error.yml#/ErrorInfo'
